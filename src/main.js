@@ -16,7 +16,74 @@ function notify(msg,bad=false){let el=document.createElement('div');el.className
 function err(e){notify(e?.message||String(e),true)}
 function icon(name){return `<i data-lucide="${name}"></i>`}
 function mount(html){app.innerHTML=html;createIcons({icons,attrs:{'stroke-width':1.8}})}
-function authView(){mount(`<main class="auth"><div class="logo">${icon('Package')}</div><h1>仓库管家</h1><p>手机扫码 · 实时库存 · 责任追溯</p>${!sb?'<div class="warning">请先配置 .env 中的 Supabase 地址和密钥</div>':''}<form id="login"><label>登录邮箱<input name="email" type="email" autocomplete="username" required placeholder="employee@example.com"></label><label>密码<input name="password" type="password" autocomplete="current-password" required minlength="6"></label><button class="primary" ${!sb?'disabled':''}>登录</button></form><small>员工账号由管理员在 Supabase 后台创建，不开放自行注册。</small></main>`);document.querySelector('#login').onsubmit=async e=>{e.preventDefault();let d=new FormData(e.target);let {error}=await sb.auth.signInWithPassword({email:d.get('email'),password:d.get('password')});if(error)err(error);else await start()}}
+
+function authView() {
+  mount(`
+    <main class="auth">
+      <div class="logo">${icon('Package')}</div>
+      <h1>仓库管家</h1>
+      <p>手机扫码 · 实时库存 · 责任追溯</p>
+
+      ${!sb ? '<div class="warning">尚未连接数据库，请先配置 Supabase</div>' : ''}
+
+      <form id="login">
+        <label>
+          登录账号
+          <input
+            name="username"
+            type="text"
+            autocomplete="username"
+            required
+            placeholder="请输入账号"
+          >
+        </label>
+
+        <label>
+          登录密码
+          <input
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+            placeholder="请输入密码"
+          >
+        </label>
+
+        <button class="primary" ${!sb ? 'disabled' : ''}>
+          登录
+        </button>
+      </form>
+
+      <small>账号由老板统一分配，不开放自行注册。</small>
+    </main>
+  `);
+
+  document.querySelector('#login').onsubmit = async e => {
+    e.preventDefault();
+
+    const d = new FormData(e.target);
+    const username = String(d.get('username')).trim().toLowerCase();
+    const password = String(d.get('password'));
+
+    if (!/^[a-z0-9_]{3,32}$/.test(username)) {
+      return err('账号只能包含3-32位小写字母、数字或下划线');
+    }
+
+    const email = `${username}@warehouse.internal`;
+
+    const { error } = await sb.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) {
+      err('账号或密码错误');
+    } else {
+      await start();
+    }
+  };
+}
+
 async function fetchData(){let [a,b,c,d,e,f,g]=await Promise.all([sb.from('products').select('*').order('name'),sb.from('product_units').select('*'),sb.from('stock_balances').select('*'),sb.from('stock_transactions').select('*').order('created_at',{ascending:false}).limit(300),sb.from('stock_counts').select('*').order('created_at',{ascending:false}).limit(200),sb.from('profiles').select('*'),manager()?sb.from('audit_logs').select('*').order('created_at',{ascending:false}).limit(200):Promise.resolve({data:[]})]);for(let x of [a,b,c,d,e,f,g])if(x.error)throw x.error;[products,units,balances,tx,counts,people,logs]=[a.data,b.data,c.data,d.data,e.data,f.data,g.data]}
 async function start(){if(!sb)return authView();let {data:{session:s}}=await sb.auth.getSession();session=s;if(!s)return authView();let {data,error}=await sb.from('profiles').select('*').eq('id',s.user.id).single();if(error||!data?.active){authView();return err('账号未启用或尚未创建员工资料')}profile=data;try{await fetchData();render()}catch(e){err(e);mount('<main class="auth"><h2>数据加载失败</h2><button id="retry">重试</button></main>');document.querySelector('#retry').onclick=start}}
 function shell(content){mount(`<header><div><strong>仓库管家</strong><small>${esc(profile.display_name)} · ${role()==='admin'?'老板':role()==='manager'?'主管':'员工'}</small></div><button class="ghost" id="reload">${icon('RefreshCw')}</button></header><main class="content">${content}</main><nav>${[['home','Home','首页'],['stock','Package','库存'],['move','PackagePlus','出入库'],['counts','ClipboardCheck','盘点'],['more','History','更多']].map(([id,ic,t])=>`<button data-nav="${id}" class="${view===id?'selected':''}">${icon(ic)}<span>${t}</span></button>`).join('')}</nav>`);document.querySelector('#reload').onclick=async()=>{try{await fetchData();render();notify('已刷新')}catch(e){err(e)}};document.querySelectorAll('[data-nav]').forEach(x=>x.onclick=()=>{stopScanner();view=x.dataset.nav;render()})}
