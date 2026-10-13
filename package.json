@@ -1,0 +1,1 @@
+{"name":"warehouse-mobile-pwa","version":"1.0.0","type":"module","scripts":{"dev":"vite --host 0.0.0.0","build":"vite build","preview":"vite preview --host 0.0.0.0"},"dependencies":{"@supabase/supabase-js":"^2.57.0","html5-qrcode":"^2.3.8","xlsx":"^0.18.5","lucide":"^0.468.0"},"devDependencies":{"vite":"^6.2.0","vite-plugin-pwa":"^0.21.1"}}
